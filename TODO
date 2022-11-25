@@ -1,0 +1,27 @@
+3 different corpus -> corpora
+
+OT, NT, Quran
+
+each has documents (verses) belonging
+
+for each corpus/class ->> want to know how many documents it contains
+
+for each term -> know how many documents it belongs to (1 if contained, 0 if not scores for each document that contains term)
+              -> also has class example for term 'jesus' , 'OT' : 0, 'NT': 133, 'Q': 3 (not accurate)
+
+
+
+FOR EACH CORPORA ; get NO of documents, return term index:
+
+containing ->
+
+1. amount of documents contained
+2.
+
+
+@TODO after 24th
+
+- Done: indexes of both corpora and doc_map
+- DO: load these in, change dictionary to have word term to class and then list
+
+have dictionary -> word -> ['OT','NT','Quran'] -> number of documents within class that contain word
