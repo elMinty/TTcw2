@@ -2,6 +2,9 @@ import Stemmer
 import re
 import pandas as pd
 import math
+from gensim.models import LdaModel
+from gensim.test.utils import common_texts, datapath
+from gensim.corpora.dictionary import Dictionary
 
 
 def index_to_word_dict(f):
@@ -204,27 +207,20 @@ def mutual_information(N, n11, n10, n01, n00):
     n0 = n01 + n00
     n_0 = n10 + n00
 
-    if (n11 == 0) | (n1 == 0) | (n_1 == 0):
-        first_part = 0
-    else:
-        first_part = (n11 / N) * math.log2((N * n11) / (n1 * n_1))
+    result = 0
 
-    if (n01 == 0) | (n0 == 0) | (n_1 == 0) :
-        second_part = 0
-    else:
-        second_part = (n01 / N) * math.log2((N * n01) / (n0 * n_1))
-
-    if (n10 == 0) | (n1 == 0) | (n_0 == 0):
-        third_part = 0
-    else:
-        third_part = (n10 / N) * math.log2((N * n10) / (n1 * n_0))
-
-    if (n00 == 0) | (n0 == 0) | (n_0 == 0):
-        fourth_part = 0
-    else:
-        fourth_part = (n00 / N) * math.log2((N * n00) / (n0 * n_0))
-
-    result = first_part + second_part + third_part + fourth_part
+    if n11 != 0:
+        part11 = (n11 / N) * math.log2((N * n11) / (n1 * n_1))
+        result += part11
+    if n01 != 0:
+        part01 = (n01 / N) * math.log2((N * n01) / (n0 * n_1))
+        result += part01
+    if n10 != 0:
+        part10 = (n10 / N) * math.log2((N * n10) / (n1 * n_0))
+        result += part10
+    if n00 != 0:
+        part00 = (n00 / N) * math.log2((N * n00) / (n0 * n_0))
+        result += part00
 
     return result
 
@@ -250,19 +246,53 @@ class Text:
         self.corpora_text = {}
         self.corpora_class = {}
         self.stop_words = self.get_stop_words()
-
+        self.lda = None
 
         self.token_scores = {}
 
-    def load_tsv_to_index(self, file_name):
+    def invert_tsv(self, file_name):
+        df = self.__load_tsv(file_name)
+        self.__doc_to_index(df)
+
+    def lda_tsv(self,file_name):
+        df = self.__load_tsv(file_name)
+        book_list = ['OT', 'NT', 'Quran']
+
+        doc_list = []
+
+        for book in book_list:
+            df_book = df.loc[df['Book'] == book]
+            sent_list = df_book['Sentence'].tolist()
+
+            for i in range(len(sent_list)):
+                word_list = convert_to_wordlist(self.stop_words, sent_list[i])
+                doc_list.append(word_list)
+
+        common_dictionary = Dictionary(doc_list)
+        common_corpus = [common_dictionary.doc2bow(text) for text in doc_list]
+        self.lda = LdaModel(common_corpus, id2word=common_dictionary,num_topics=20)
+        temp_file = datapath("model")
+        self.lda.save(temp_file)
+
+        topics = [self.lda.get_document_topics(common_dictionary.doc2bow(text)) for text in doc_list]
+        print(topics)
+
+    def lda_get_scores(self):
+        self.lda = LdaModel.load(datapath("model"))
+
+
+    @staticmethod
+    def __load_tsv(file_name):
         df = pd.DataFrame(columns=['Book', 'Sentence'])
 
         with open("train_and_dev.tsv") as file:
-
             for line in file:
                 l = line.split('\t')
                 df = df.append({'Book': l[0], 'Sentence': l[1]}, ignore_index=True)
 
+        return df
+
+    def __doc_to_index(self, df):
         book_list = ['OT', 'NT', 'Quran']
         overall = 0
         doc_list = {'OT_docs': 0, 'NT_docs': 0, 'Quran_docs': 0}
@@ -342,7 +372,7 @@ class Text:
             self.token_scores.update({word: word_SCORES})
 
     def return_top_ten(self):
-        corpus_list = ['OT','NT','Quran']
+        corpus_list = ['OT', 'NT', 'Quran']
 
         OT_mi = []
         NT_mi = []
@@ -380,13 +410,13 @@ class Text:
 
         with open('index.stats', 'w') as f:
             scores = ['Mutual Information', 'CHI squared']
-            corpus = ['OT','NT','Quran']
+            corpus = ['OT', 'NT', 'Quran']
 
             for i in range(len(scores)):
-                f.write(scores[i] + ':\n')
+                f.write(scores[i] + ':\n\n')
                 for j in range(len(corpus)):
-                    f.write(corpus[j] + '\n')
-                    for k in range(10):
+                    f.write(corpus[j] + '\n\n')
+                    for k in range(20):
                         f.write(stats[i][j][k][1] + ', ' + str(stats[i][j][k][0]) + '\n')
 
             f.close()

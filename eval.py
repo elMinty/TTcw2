@@ -158,6 +158,7 @@ class Eval:
                 rel_rank = []
 
                 df_q = df_sys.loc[(df_sys['query_number'] == j + 1) & (df_sys['Relevant'] == True)]
+
                 ranks = df_q['rank_of_doc'].tolist()
 
                 if ranks:
@@ -165,7 +166,7 @@ class Eval:
                     for k in range(len(ranks)):
                         rel_rank.append((k + 1) / ranks[k])
 
-                    sys.append(sum(rel_rank) / len(rel_rank))
+                    sys.append(sum(rel_rank) / self.rel_number[j])
                 else:
                     sys.append(0.0)
 

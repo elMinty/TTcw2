@@ -19,9 +19,6 @@ containing ->
 2.
 
 
-@TODO after 24th
+@TODO
 
-- Done: indexes of both corpora and doc_map
-- DO: load these in, change dictionary to have word term to class and then list
-
-have dictionary -> word -> ['OT','NT','Quran'] -> number of documents within class that contain word
+divide average precision by total relevant documents by query
