@@ -1,26 +1,70 @@
-
 import Stemmer
 import re
 import pandas as pd
 import math
 
-# def index_parse(f, book_dict):
-#     for line in f:  # for line in file
-#
-#         if line == "\n":  # ignore blank newline lines
-#             continue
-#
-#         if line[0] != "\t":  # if next line is a word
-#             line = line.strip("\n")
-#             line = line.strip(":")
-#
-#             pos_dict[line] = {}  # enter new key into dictionary
-#
-#             set_dict[line] = set()
-#
-#             prev_word = line  # update word for locations
-#
-#         if line[0] == "\t":  # if word document and locations
+
+def index_to_word_dict(f):
+    prev_word = ""
+    set_dict = {}
+
+    for line in f:  # for line in file
+
+        if line == "\n":  # ignore blank newline lines
+            continue
+
+        if line[0] != "\t":  # if next line is a word
+            line = line.strip("\n")
+            line = line.strip(":")
+
+            if "_docs" in line:
+                set_dict[line] = 0
+
+            else:
+                set_dict[line] = {"OT": [], "NT": [], "Quran": [], "OT_length": 0, "NT_length": 0, "Quran_length": 0}
+
+            prev_word = line  # update word for locations
+
+        if line[0] == "\t":  # if word document and locations
+
+            line = line.strip("\t")
+            line = line.strip("\n")
+            line = line.strip(" ")
+
+            if "_docs" in prev_word:
+                set_dict[prev_word] = line
+                continue
+
+            line = line.split('-')
+            doc = int(line[0])  # doc number is first in string
+            book = str(line[1]).strip(" ")
+
+            if book == "OT":
+                get_set = set_dict[prev_word]
+                doc_list = get_set["OT"]
+                doc_list.append(doc)
+                get_set.update({"OT": doc_list, "OT_length": len(doc_list)})
+                set_dict[prev_word] = get_set
+                continue
+
+            if book == "NT":
+                get_set = set_dict[prev_word]
+                doc_list = get_set["NT"]
+                doc_list.append(doc)
+                get_set.update({"NT": doc_list, "NT_length": len(doc_list)})
+                set_dict[prev_word] = get_set
+                continue
+
+            if book == "Quran":
+                get_set = set_dict[prev_word]
+                doc_list = get_set["Quran"]
+                doc_list.append(doc)
+                get_set.update({"Quran": doc_list, "Quran_length": len(doc_list)})
+                set_dict[prev_word] = get_set
+                continue
+
+    return set_dict
+
 
 """
 functions from cw1
@@ -124,8 +168,14 @@ def list_to_string(list):
 
 def index_toText(index, f):
     for word in index:
+
         f.write(word + ":\n")
         word_dic = index.get(word)
+
+        if type(word_dic) is int:
+            f.write("\t" + str(word_dic) + "\n")
+            continue
+
         for document in word_dic:
             f.write("\t" + document + "\n")
 
@@ -136,10 +186,6 @@ def index_toText(index, f):
 end functions from cw1
 """
 
-
-
-
-
 """
 
 N = total number of documents belonging to the Corpara
@@ -147,7 +193,7 @@ N = total number of documents belonging to the Corpara
 n11 = total number of documents containing term T within class C
 n10 = total number of documents containing term T outwith class C
 n01 = total number of documents not containing term T within class C
-n00 = total number of documents 
+n00 = total number of documents not containing term T outside of class C
 
 """
 
@@ -158,35 +204,55 @@ def mutual_information(N, n11, n10, n01, n00):
     n0 = n01 + n00
     n_0 = n10 + n00
 
-    first_part = (n11 / N) * math.log2((N * n11) / (n1 * n_1))
+    if (n11 == 0) | (n1 == 0) | (n_1 == 0):
+        first_part = 0
+    else:
+        first_part = (n11 / N) * math.log2((N * n11) / (n1 * n_1))
 
-    second_part = (n01 / N) * math.log2((N * n01) / (n0 * n_1))
+    if (n01 == 0) | (n0 == 0) | (n_1 == 0) :
+        second_part = 0
+    else:
+        second_part = (n01 / N) * math.log2((N * n01) / (n0 * n_1))
 
-    third_part = (n10 / N) * math.log2((N * n10) / (n1 * n_0))
+    if (n10 == 0) | (n1 == 0) | (n_0 == 0):
+        third_part = 0
+    else:
+        third_part = (n10 / N) * math.log2((N * n10) / (n1 * n_0))
 
-    fourth_part = (n00 / N) * math.log2((N * n00) / (n0 * n_0))
+    if (n00 == 0) | (n0 == 0) | (n_0 == 0):
+        fourth_part = 0
+    else:
+        fourth_part = (n00 / N) * math.log2((N * n00) / (n0 * n_0))
 
     result = first_part + second_part + third_part + fourth_part
 
     return result
 
 
+def chi_squared(n11, n10, n01, n00):
+    first = sum([n11, n10, n01, n00])
+    second = ((n11 * n00) - (n10 * n01)) ** 2
+
+    third = (n11 + n01) * (n11 + n10) * (n10 + n00) * (n01 + n00)
+
+    if third == 0:
+        return 0
+
+    return (first * second) / third
+
+
 class Text:
 
     def __init__(self):
+        self.amount_docs = {}
+        self.doc_map = None
+        self.word_dict = None
         self.corpora_text = {}
         self.corpora_class = {}
         self.stop_words = self.get_stop_words()
 
 
-    # def part2(self):
-    #     """
-    #     first load_tsv_to_index the tsv file
-    #     with this have a file represented as an index and go from there to get results:
-    #     :return: index to file
-    #     """
-    #
-    #     self.index_load(self, file_name)
+        self.token_scores = {}
 
     def load_tsv_to_index(self, file_name):
         df = pd.DataFrame(columns=['Book', 'Sentence'])
@@ -199,34 +265,131 @@ class Text:
 
         book_list = ['OT', 'NT', 'Quran']
         overall = 0
+        doc_list = {'OT_docs': 0, 'NT_docs': 0, 'Quran_docs': 0}
 
         for book in book_list:
             df_book = df.loc[df['Book'] == book]
             sent_list = df_book['Sentence'].tolist()
-            doc_list = []
+            docs = 0
 
             for i in range(len(sent_list)):
                 word_list = convert_to_wordlist(self.stop_words, sent_list[i])
-                self.corpora_text.update({str(i+1+overall): word_list})
-                doc_list.append(str(i+1+overall))
-                self.corpora_class.update({str(i+1+overall): [book]})
+                self.corpora_text.update({str(i + 1 + overall) + " - " + book: word_list})
+                overall += 1
+                docs += 1
 
-            overall += len(doc_list)
+            book_docs = book + "_docs"
+            doc_list.update({book_docs: docs})
 
         text_doc = invert_index(self.corpora_text)
+        text_doc.update(doc_list)
+        text_doc.update({'overall_docs': overall})
 
-        with open(file_name,'w') as f:
+        with open('corpora.index', 'w') as f:
             index_toText(text_doc, f)
             f.close()
 
-        with open("doc_map." + file_name, 'w') as f:
+        with open("doc_map.corpora.index", 'w') as f:
             index_toText(self.corpora_class, f)
             f.close()
 
-    # def index_load(self,file_name):
-    #     with open(file_name, 'r') as f:
-    #         index_parse(f)
-    #         f.close()
+    def download_index(self, file_name):
+
+        with open(file_name, 'r') as f:
+            word_dict = index_to_word_dict(f)
+            self.word_dict = word_dict
+            f.close()
+
+        self.amount_docs.update({'Overall': self.word_dict['overall_docs']})
+        self.amount_docs.update({'OT': self.word_dict['OT_docs']})
+        self.amount_docs.update({'NT': self.word_dict['NT_docs']})
+        self.amount_docs.update({'Quran': self.word_dict['Quran_docs']})
+
+        self.word_dict.pop('overall_docs')
+        self.word_dict.pop('OT_docs')
+        self.word_dict.pop('NT_docs')
+        self.word_dict.pop('Quran_docs')
+
+    def process(self):
+
+        for word in self.word_dict:
+
+            word_SCORES = {}
+
+            get_set = self.word_dict[word]
+            corpus_list = ['OT', 'NT', 'Quran']
+            N = int(self.amount_docs['Overall'])
+
+            corp_stats = {'OT': None, 'NT': None, 'Quran': None}
+            stats_lists = []
+
+            for corp in corpus_list:
+                words_in = get_set[corp + '_length']
+                words_out = int(self.amount_docs[corp]) - int(words_in)
+
+                stats_lists.append([words_in, words_out])
+
+            for corp in range(len(corpus_list)):
+                n11 = int(stats_lists[corp][0])
+                n01 = int(stats_lists[corp][1])
+                n10 = int(stats_lists[corp - 1][0]) + int(stats_lists[corp - 2][0])
+                n00 = int(stats_lists[corp - 1][1]) + int(stats_lists[corp - 2][1])
+                mi = mutual_information(N, n11, n10, n01, n00)
+                chi = chi_squared(n11, n10, n01, n00)
+
+                word_SCORES.update({corpus_list[corp]: [mi, chi]})
+
+            self.token_scores.update({word: word_SCORES})
+
+    def return_top_ten(self):
+        corpus_list = ['OT','NT','Quran']
+
+        OT_mi = []
+        NT_mi = []
+        Quran_mi = []
+
+        OT_chi = []
+        NT_chi = []
+        Quran_chi = []
+
+        for word in self.token_scores:
+            get_set = self.token_scores[word]
+
+            get_set_OT = get_set['OT']
+            OT_mi.append((get_set_OT[0], word))
+            OT_chi.append((get_set_OT[1], word))
+
+            get_set_NT = get_set['NT']
+            NT_mi.append((get_set_NT[0], word))
+            NT_chi.append((get_set_NT[1], word))
+
+            get_set_Quran = get_set['Quran']
+            Quran_mi.append((get_set_Quran[0], word))
+            Quran_chi.append((get_set_Quran[1], word))
+
+        OT_mi.sort(reverse=True)
+        OT_chi.sort(reverse=True)
+
+        NT_mi.sort(reverse=True)
+        NT_chi.sort(reverse=True)
+
+        Quran_mi.sort(reverse=True)
+        Quran_chi.sort(reverse=True)
+
+        stats = [[OT_mi, NT_mi, Quran_mi], [OT_chi, NT_chi, Quran_chi]]
+
+        with open('index.stats', 'w') as f:
+            scores = ['Mutual Information', 'CHI squared']
+            corpus = ['OT','NT','Quran']
+
+            for i in range(len(scores)):
+                f.write(scores[i] + ':\n')
+                for j in range(len(corpus)):
+                    f.write(corpus[j] + '\n')
+                    for k in range(10):
+                        f.write(stats[i][j][k][1] + ', ' + str(stats[i][j][k][0]) + '\n')
+
+            f.close()
 
     @staticmethod
     def get_stop_words():
@@ -236,10 +399,3 @@ class Text:
         file.close()
 
         return stop_words
-
-    # n00
-    # n01
-    # n10
-    # n11
-    # n - all instances in the table sum(n00,n01,...)
-
