@@ -1,5 +1,7 @@
 import Stemmer
 import re
+
+import numpy as np
 import pandas as pd
 import math
 from gensim.models import LdaModel
@@ -237,9 +239,39 @@ def chi_squared(n11, n10, n01, n00):
     return (first * second) / third
 
 
+def corp_average_topic(topics):
+    print(len(topics))
+    average_topic = []
+    for i in range(20):
+        average_topic.append([])
+
+    for i in range(len(topics)):
+        doc = topics[i]
+        for topic in range(len(doc)):
+            doc_topic = doc[topic]
+            average_topic[doc_topic[0]].append(doc_topic[1])
+
+    average_topic = [sum(topic)/len(topics) for topic in average_topic]
+
+    return average_topic
+
+
+def sort_averages(corp_topic):
+    sort_corp = []
+
+    for corp in corp_topic:
+        new_list = []
+        for i in range(20):
+            new_list.append((corp[i], i + 1))
+        new_list.sort(reverse=True)
+        sort_corp.append(new_list)
+    return sort_corp
+
+
 class Text:
 
     def __init__(self):
+        self.doc_list = None
         self.amount_docs = {}
         self.doc_map = None
         self.word_dict = None
@@ -250,11 +282,21 @@ class Text:
 
         self.token_scores = {}
 
-    def invert_tsv(self, file_name):
+    def part_2(self):
+
+        self.__invert_tsv('train_and_dev.tsv')
+        self.__download_index('corpora.index')
+        self.__process()
+        self.__return_top_ten()
+
+        self.__load_tsv('train_and_dev.tsv')
+        self.__lda_get_scores()
+
+    def __invert_tsv(self, file_name):
         df = self.__load_tsv(file_name)
         self.__doc_to_index(df)
 
-    def lda_tsv(self,file_name):
+    def __lda_tsv(self, file_name):
         df = self.__load_tsv(file_name)
         book_list = ['OT', 'NT', 'Quran']
 
@@ -268,17 +310,51 @@ class Text:
                 word_list = convert_to_wordlist(self.stop_words, sent_list[i])
                 doc_list.append(word_list)
 
+        self.doc_list = doc_list
+
+    def __lda_get_scores(self):
+
+        doc_list = self.doc_list
+
         common_dictionary = Dictionary(doc_list)
         common_corpus = [common_dictionary.doc2bow(text) for text in doc_list]
-        self.lda = LdaModel(common_corpus, id2word=common_dictionary,num_topics=20)
+        self.lda = LdaModel(common_corpus, id2word=common_dictionary, num_topics=20)
+        self.lda = LdaModel.load(datapath("model"))
         temp_file = datapath("model")
         self.lda.save(temp_file)
 
         topics = [self.lda.get_document_topics(common_dictionary.doc2bow(text)) for text in doc_list]
-        print(topics)
 
-    def lda_get_scores(self):
-        self.lda = LdaModel.load(datapath("model"))
+        topics_OT = topics[0:20766]
+
+        topics_NT = topics[20766: (20766 + 7112)]
+        topics_Q = topics[(20766 + 7112): 33494]
+
+        topic_prob_OT = corp_average_topic(topics_OT)
+        topic_prob_NT = corp_average_topic(topics_NT)
+        topic_prob_Q = corp_average_topic(topics_Q)
+
+        corp_topic = [topic_prob_OT, topic_prob_NT, topic_prob_Q]
+
+        sort_corp = sort_averages(corp_topic)
+        print(corp_topic[0])
+        print(sort_corp[0])
+        print(corp_topic[1])
+        print(sort_corp[1])
+
+        self.print_top_results(sort_corp)
+
+    def print_top_results(self, sort_corp):
+        topic_tokens = []
+        corp_list = ['OT', 'NT', 'Quran']
+
+        for i in range(len(sort_corp)):
+            top_3 = sort_corp[i]
+            print('\n --------------------------------------------- \n' + corp_list[i] + ': \n\n')
+            for j in range(3):
+                print(str(top_3[j][1]) + ' probscore: ' + str(top_3[j][0]))
+                print(self.lda.print_topic(top_3[j][1] - 1, 10))
+                print('\n')
 
 
     @staticmethod
@@ -323,7 +399,7 @@ class Text:
             index_toText(self.corpora_class, f)
             f.close()
 
-    def download_index(self, file_name):
+    def __download_index(self, file_name):
 
         with open(file_name, 'r') as f:
             word_dict = index_to_word_dict(f)
@@ -340,7 +416,7 @@ class Text:
         self.word_dict.pop('NT_docs')
         self.word_dict.pop('Quran_docs')
 
-    def process(self):
+    def __process(self):
 
         for word in self.word_dict:
 
@@ -371,7 +447,7 @@ class Text:
 
             self.token_scores.update({word: word_SCORES})
 
-    def return_top_ten(self):
+    def __return_top_ten(self):
         corpus_list = ['OT', 'NT', 'Quran']
 
         OT_mi = []

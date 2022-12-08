@@ -21,4 +21,4 @@ containing ->
 
 @TODO
 
-divide average precision by total relevant documents by query
+change word id to before turned into matrix with all of the words

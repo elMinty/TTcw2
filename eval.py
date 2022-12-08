@@ -54,12 +54,12 @@ class Eval:
                 if j == 10:
                     sys_number_mean = str(i + 1)
                     q_number_mean = 'mean'
-                    p_10_mean = sum(self.prec_10[i]) / 10
-                    r_50_mean = sum(self.rec_50[i])/10
-                    r_precision_mean = sum(self.r_precision[i]) / 10
-                    ap_mean = sum(self.average_precision[i]) / 10
-                    n_10_mean = sum(self.nDCG_10[i]) / 10
-                    n_20_mean = sum(self.nDCG_20[i]) / 10
+                    p_10_mean = round((sum(self.prec_10[i]) / 10) , 3)
+                    r_50_mean = round((sum(self.rec_50[i])/10) , 3)
+                    r_precision_mean = round((sum(self.r_precision[i]) / 10) , 3)
+                    ap_mean = round((sum(self.average_precision[i]) / 10) ,3)
+                    n_10_mean = round((sum(self.nDCG_10[i]) / 10), 3)
+                    n_20_mean = round((sum(self.nDCG_20[i]) / 10), 3)
 
                     d = {'system_number': sys_number_mean, 'query_number': q_number_mean, 'P@10': p_10_mean, 'R@50': r_50_mean,
                          'r-precision': r_precision_mean, 'AP': ap_mean,
@@ -79,27 +79,27 @@ class Eval:
 
                 # P@10
 
-                p_10 = self.prec_10[i][j]
+                p_10 = round(self.prec_10[i][j], 3)
 
                 # R@50
 
-                r_50 = self.rec_50[i][j]
+                r_50 = round(self.rec_50[i][j],3)
 
                 # r-precision
 
-                r_p = self.r_precision[i][j]
+                r_p = round(self.r_precision[i][j],3)
 
                 # AP
 
-                a_p = self.average_precision[i][j]
+                a_p = round(self.average_precision[i][j],3)
 
                 # nDCG@10
 
-                n_10 = self.nDCG_10[i][j]
+                n_10 = round(self.nDCG_10[i][j],3)
 
                 # nDCG@20
 
-                n_20 = self.nDCG_20[i][j]
+                n_20 = round(self.nDCG_20[i][j],3)
 
                 d = {'system_number': sys_number, 'query_number': q_number, 'P@10': p_10, 'R@50': r_50,
                      'r-precision': r_p, 'AP': a_p,
@@ -122,13 +122,16 @@ class Eval:
 
             for j in range(10):
 
-                df_q = df_sys.loc[(df_sys['query_number'] == j + 1) & (df_sys['rank_of_doc'] <= cut_off)]
-                dcg = df_q['Relevancy score'].tolist()
-                iDCG = df_q['Relevancy score'].tolist()
+                df_q = df_sys.loc[(df_sys['query_number'] == j + 1)]
+                dcg = df_q.loc[(df_q['rank_of_doc'] <= cut_off)]
+                dcg = dcg['Relevancy score'].tolist()
+                iDCG = self.cvs_files['qrels.csv']
+                iDCG = iDCG.loc[iDCG['query_id'] == j+1]
+                iDCG = iDCG['relevance'].tolist()
                 iDCG.sort(reverse=True)
 
                 dcg_score = dcg_formula(dcg)
-                iDCG_score = dcg_formula(iDCG)
+                iDCG_score = dcg_formula(iDCG[0:cut_off])
 
                 if iDCG_score == 0:
                     sys.append(0.0)
@@ -211,6 +214,8 @@ class Eval:
 
         df_50 = df.loc[df['rank_of_doc'] <= 50]
 
+        print(df_50['rank_of_doc'])
+
         for i in range(6):
 
             # 50 top rank
@@ -238,7 +243,7 @@ class Eval:
                     rec_sys.append(0.0)
 
                 else:
-                    rec_sys.append(rel_doc_50 / rel_doc)
+                    rec_sys.append(rel_doc_50 / self.rel_number[j])
 
             recall_at_50.append(rec_sys)
 
