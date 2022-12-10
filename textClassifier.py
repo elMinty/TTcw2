@@ -1,13 +1,70 @@
 
 import random
 import re
+from datetime import datetime
 
 import Stemmer
+import emoji
+from emoji import *
 import numpy as np
 import sklearn.model_selection
 from sklearn.svm import SVC
 
 from scipy.sparse import save_npz, dok_matrix, load_npz
+
+
+def return_common_words(corr, incorr):
+    doc_dict = load_text_file_as_dict('train.txt')
+    corr_word_list = []
+    corr_word_set = set()
+
+    incorr_word_list = []
+    incorr_word_set = set()
+
+    for i in corr:
+        doc = i[1]
+
+        if doc_dict.get(str(doc)):
+            bow = doc_dict.get(str(doc))[1]
+            corr_word_set.update(bow)
+            corr_word_list.extend(bow)
+
+
+    for i in incorr:
+        doc = i[1]
+
+        if doc_dict.get(str(doc)):
+            bow = doc_dict.get(str(doc))[1]
+            incorr_word_set.update(bow)
+            incorr_word_list.extend(bow)
+
+    with open('dev.corr.wordlist', 'w') as f:
+        ord_word_list = []
+
+        for word in corr_word_set:
+            number = len([word for wx in corr_word_list if wx == word])
+            ord_word_list.append((word, number))
+
+        ord_word_list.sort(key=lambda x:x[1])
+
+        for word in ord_word_list:
+            f.write(word[0] + ' : ' + str(word[1]) + '\n')
+
+        f.close()
+
+    with open('dev.incorr.wordlist', 'w') as f:
+        ord_word_list = []
+
+        for word in incorr_word_set:
+            number = len([word for wx in incorr_word_list if wx == word])
+            ord_word_list.append((word, number))
+
+        ord_word_list.sort(key=lambda x:x[1])
+
+        for word in ord_word_list:
+            f.write(word[0] + ' : ' + str(word[1]) + '\n')
+
+        f.close()
 
 def get_positives(pairs):
     TP = {'-1': 0, '0': 0, '1': 0}
@@ -36,7 +93,7 @@ def get_recall(true_amount, TP):
     recall = {'-1': 0, '0': 0, '1': 0}
 
     for key in true_amount.keys():
-        recall[key].update({key : TP[key] / true_amount[key]})
+        recall.update({key : TP[key] / true_amount[key]})
 
     return recall
 
@@ -45,7 +102,7 @@ def get_precision(predicted_amount, TP):
     precision = {'-1': 0, '0': 0, '1': 0}
 
     for key in predicted_amount.keys():
-        precision[key].update({key: TP[key] / predicted_amount[key]})
+        precision.update({key: TP[key] / predicted_amount[key]})
 
     return precision
 
@@ -56,7 +113,7 @@ def get_f_score(recall,precision):
         prec = precision[key]
         reca = recall[key]
         f = 2*((reca*prec)/(reca+prec))
-        f_score[key].update({key: f})
+        f_score.update({key: f})
 
     return f_score
 
@@ -79,7 +136,7 @@ def get_stats(trueY,predictY):
     # precision - TP / predicted_amount
     precision = get_precision(predicted_amount, TP)
 
-    # f-score
+    # .py-score
     f_score = get_f_score(recall,precision)
 
 
@@ -118,7 +175,7 @@ def load_list(filename):
 
     return list
 
-def load_text_file(file_name):
+def load_text_file(file_name, base_or_improved):
 
     with open(file_name, 'r', encoding='utf-8') as f:
         entries = []
@@ -133,9 +190,35 @@ def load_text_file(file_name):
             sentiment = line[1]
             text = line[2]
             sw = get_stop_words()
-            bow = convert_to_wordlist(sw, text)
+            if base_or_improved == 'base':
+                bow = convert_to_wordlist(sw, text)
+            if base_or_improved == 'improved':
+                bow = convert_to_wordlist_improved(sw,text)
 
             entries.append([uid, sentiment, bow])
+
+        f.close()
+
+    return entries
+
+def load_text_file_as_dict(file_name):
+
+    with open(file_name, 'r', encoding='utf-8') as f:
+        entries = {}
+        first_line = True
+
+        for line in f:
+            if first_line:
+                first_line = False
+                continue
+            line = line.split('\t')
+            uid = line[0]
+            sentiment = line[1]
+            text = line[2]
+            sw = get_stop_words()
+            bow = convert_to_wordlist(sw, text)
+
+            entries.update({uid : (sentiment, bow)})
 
         f.close()
 
@@ -210,12 +293,46 @@ def stemmer(word_list):
 
     return word_list
 
+def is_link(word_list):
+    link_types = ['https//', 'http//']
+    links = []
+    for test_sub in link_types:
+        links.extend(['/l' for i in re.finditer(test_sub, word_list)])
+    return links
+
+def get_pronouns(word_list):
+    personal_pronouns = ['i', 'we', 'me', 'us', 'mine', 'ours', 'my', 'our']
+    other_pronouns = ['he', 'his', 'him', 'she', 'her', 'hers', 'you', 'yours', 'they', 'theirs', 'them', 'it']
+    p = ['/pp' for word in word_list if word in personal_pronouns]
+    o = ['/op' for word in word_list if word in other_pronouns]
+    p.extend(o)
+
+    return p
+
+def convert_to_wordlist_improved(stopWords, word_list):
+    links = is_link(word_list)
+    punctuation_list = ['/p' for p in word_list if not p.isalnum()]
+    emojis = ['/e' for c in word_list if emoji.is_emoji(c)]
+    word_list = tokenise(word_list)
+    word_list = case_fold(word_list)
+
+    pronouns = get_pronouns(word_list)
+
+    word_list = sw_remove(word_list, stopWords)
+    word_list = stemmer(word_list)
+    word_list.extend(punctuation_list)
+    word_list.extend(links)
+    word_list.extend(emojis)
+    word_list.extend(pronouns)
+
+    return word_list
 
 def convert_to_wordlist(stopWords, word_list):
     word_list = tokenise(word_list)
     word_list = case_fold(word_list)
     word_list = sw_remove(word_list, stopWords)
     word_list = stemmer(word_list)
+
 
     return word_list
 
@@ -241,40 +358,200 @@ class Classify:
         self.matrix = {}
 
 
-    def load_npz(self, filename):
+    def __load_npz(self, filename):
         self.matrix.update({filename: load_npz(filename).todok()})
 
-    def train_model(self):
-        X = self.matrix.get('trainsm.npz')
-        y = load_list('train.keys')
+    def __train_model(self, base_or_improved):
+        X = self.matrix.get(base_or_improved + '.trainsm.npz')
+        y = load_list(base_or_improved + '.train.keys')
         y = [int(i) for i in y]
         self.model = SVC(C=1000)
         self.model.fit(X,y)
 
-    def test(self):
-        X = self.matrix.get('trainsm.npz')
-        y = load_list('train.keys')
+    def dev(self, base_or_improved):
+        self.__load_npz(base_or_improved + '.trainsm.npz')
+        self.__load_npz(base_or_improved + '.devsm.npz')
+
+        self.__train_model(base_or_improved)
+
+        X = self.matrix.get(base_or_improved + '.trainsm.npz')
+        y = load_list(base_or_improved + '.train.keys')
+
+        train_score = self.model.score(X,y)
+
+        X = self.matrix.get(base_or_improved + '.devsm.npz')
+        y = load_list(base_or_improved + '.dev.keys')
         xy = self.model.predict(X)
 
-        for i in range(len(y)):
-            w = str(y[i]) + ', ' + str(xy[i])
-            print(w)
-        print(self.model.score(X,y))
+        dev_score = self.model.score(X, y)
+        recall, r_mac, precision, p_mac, f_score, f_mac = get_stats(y,xy)
 
-        X = self.matrix.get('testsm.npz')
-        y = load_list('test.keys')
-        print(self.model.score(X, y))
 
-        return y
+        docs  = load_list(base_or_improved + '.dev.docs')
 
-    def file_load_label(self, filename):
-        entries = load_text_file(filename)
+        with open(base_or_improved + '.dev.results', 'w') as f:
+
+            f.write('Train score: \n')
+            f.write(str(train_score) + '\n\n')
+            f.write('Dev score: \n')
+            f.write(str(dev_score) + '\n\n')
+
+            f.write('Dev recall: \n')
+            f.write('neg_recall: ' + str(recall.get('-1')) + '\n')
+            f.write('neu_recall: ' + str(recall.get('0')) +'\n')
+            f.write('pos_recall: ' + str(recall.get('1')) + '\n')
+            f.write('mac_recall: ' + str(r_mac) +  '\n')
+
+            f.write('Dev precision: \n')
+            f.write('neg_precision: ' + str(precision.get('-1')) + '\n')
+            f.write('neu_precision: ' + str(precision.get('0')) + '\n')
+            f.write('pos_precision: ' + str(precision.get('1')) + '\n')
+            f.write('mac_precision: ' + str(p_mac) + '\n')
+
+            f.write('Dev f_score: \n')
+            f.write('neg_f_score: ' + str(f_score.get('-1')) + '\n')
+            f.write('neu_f_score: ' + str(f_score.get('0')) + '\n')
+            f.write('pos_f_score: ' + str(f_score.get('1')) + '\n')
+            f.write('mac_f-score: ' + str(f_mac) + '\n')
+
+
+
+            class_dict = {'-1': 0, '0': 0, '1' : 0}
+            corr = []
+            incorr = []
+
+            for i in range(len(y)):
+                if y[i] == xy[i]:
+                    corr.append((y[i],docs[i]))
+                    n = class_dict.get(str(y[i]))
+                    n += 1
+                    class_dict[str(y[i])] = n
+
+            f.write('\nCorrectly classified: \n\n')
+
+            for i in class_dict.keys():
+                f.write(i + ': ' + str(class_dict.get(i)) + '\n')
+
+            class_dict = {'-1': 0, '0': 0, '1': 0}
+            inc_dict_neg = {'0': 0, '1' : 0 }
+            inc_dict_neu = {'-1': 0, '1': 0}
+            inc_dict_pos = {'-1': 0, '0': 0}
+
+            for i in range(len(y)):
+                if y[i] != xy[i]:
+                    incorr.append((y[i],docs[i]))
+                    n = class_dict.get(str(y[i]))
+                    n += 1
+                    class_dict[str(y[i])] = n
+
+                    if y[i] == -1:
+                        n = inc_dict_neg.get(str(xy[i]))
+                        n += 1
+                        inc_dict_neg[str(xy[i])] = n
+
+                    if y[i] == 0:
+                        n = inc_dict_neu.get(str(xy[i]))
+                        n += 1
+                        inc_dict_neu[str(xy[i])] = n
+
+                    if y[i] == 1:
+                        n = inc_dict_pos.get(str(xy[i]))
+                        n += 1
+                        inc_dict_pos[str(xy[i])] = n
+
+            corr.sort()
+            incorr.sort()
+
+            f.write('\nIncorrectly classified: \n\n')
+
+            for i in class_dict.keys():
+                f.write(i + ': ' + str(class_dict.get(i)) + '\n')
+
+            f.write('\n Classified as: \n\n')
+
+            for i in inc_dict_neg.keys():
+                f.write('negative as ' + i + ': ' + str(inc_dict_neg.get(i)) + '\n')
+
+            for i in inc_dict_neu.keys():
+                f.write('neutral as ' + i + ': ' + str(inc_dict_neu.get(i)) + '\n')
+
+            for i in inc_dict_pos.keys():
+                f.write('positive as ' + i + ': ' + str(inc_dict_pos.get(i)) + '\n')
+
+            f.close()
+
+        with open(base_or_improved + '.dev.corr_docs', 'w') as f:
+
+            for i in corr:
+                f.write(str(i[0]) + ': ' + str(i[1]) + '\n')
+
+
+            f.close()
+
+        with open(base_or_improved + '.dev.incorr_docs', 'w') as f:
+
+            for i in incorr:
+                f.write(str(i[0]) + ': ' + str(i[1]) + '\n')
+
+            f.close()
+
+        return corr, incorr
+
+
+
+
+
+
+
+
+    def test(self, base_or_improved):
+        self.__load_npz(base_or_improved + '.trainsm.npz')
+        self.__load_npz(base_or_improved + '.testsm.npz')
+
+        self.__train_model(base_or_improved)
+
+        X = self.matrix.get(base_or_improved + '.trainsm.npz')
+        y = load_list(base_or_improved + '.train.keys')
+
+        train_score = self.model.score(X, y)
+
+        X = self.matrix.get(base_or_improved + '.testsm.npz')
+        y = load_list(base_or_improved + '.test.keys')
+        xy = self.model.predict(X)
+
+        test_score = self.model.score(X, y)
+
+
+    def file_load_label(self, filename, base_or_improved):
+        entries = load_text_file(filename, base_or_improved)
         self.wuid = id_entries(entries)
         self.doc_id , self.class_id = get_classifier_doc(entries)
 
         return entries
 
-    def files_to_matrix(self,filename, base):
+    def files_to_matrix(self, base_or_improved):
+
+        start_time = datetime.now()
+
+        test = self.file_load_label('test.txt', base_or_improved)
+        train = self.file_load_label('train.txt', base_or_improved)
+        random.shuffle(test)
+        random.shuffle(train)
+
+        train, dev = sklearn.model_selection.train_test_split(train, train_size=0.9)
+        word_list = get_word_set(train, self.wuid)
+        save_list(word_list, 'all.words')
+
+
+        self.__baseline_entries_to_sm(test, base_or_improved + '.test', word_list)
+        self.__baseline_entries_to_sm(train, base_or_improved + '.train', word_list)
+        self.__baseline_entries_to_sm(dev, base_or_improved + '.dev', word_list)
+
+        print(datetime.now() - start_time)
+
+    def files_to_matrix_improved(self):
+
+        start_time = datetime.now()
 
         test = self.file_load_label('test.txt')
         train = self.file_load_label('train.txt')
@@ -286,9 +563,11 @@ class Classify:
         save_list(word_list, 'all.words')
 
 
-        self.__baseline_entries_to_sm(test, 'base.test', word_list)
-        self.__baseline_entries_to_sm(train, 'base.train', word_list)
-        self.__baseline_entries_to_sm(dev, 'base.dev', word_list)
+        self.__baseline_entries_to_sm(test, 'improved.test', word_list)
+        self.__baseline_entries_to_sm(train, 'improved.train', word_list)
+        self.__baseline_entries_to_sm(dev, 'improved.dev', word_list)
+
+        print(datetime.now() - start_time)
 
 
     def __baseline_entries_to_sm(self,dataset, key, word_list):
@@ -299,14 +578,17 @@ class Classify:
         class_list = [] # corresponding class of doc
         word_id_list = []
 
+        class_id = {'negative': -1, 'neutral': 0, 'positive': 1}
+
         for doc in dataset:
             words = doc[2]
             doc_class = doc[1]
             doc_name = doc[0]
 
-            class_list.append(doc_class)
+
+
             doc_list.append(doc_name)
-            class_list.append(doc_class)
+            class_list.append(class_id.get(doc_class))
 
             doc_word_vector = []
 
