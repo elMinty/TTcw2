@@ -1,0 +1,42 @@
+Train score: 
+0.9939812883618377
+
+Dev score: 
+0.5715817694369973
+
+Dev recall: 
+neg_recall: 0.4987146529562982
+neu_recall: 0.5958429561200924
+pos_recall: 0.5836065573770491
+mac_recall: 0.5593880554844799
+Dev precision: 
+neg_precision: 0.48743718592964824
+neu_precision: 0.5830508474576271
+pos_precision: 0.6116838487972509
+mac_precision: 0.5607239607281754
+Dev f_score: 
+neg_f_score: 0.49301143583227447
+neu_f_score: 0.5893774985722445
+pos_f_score: 0.5973154362416108
+mac_f-score: 0.5599014568820433
+
+Correctly classified: 
+
+-1: 194
+0: 516
+1: 356
+
+Incorrectly classified: 
+
+-1: 195
+0: 350
+1: 254
+
+ Classified as: 
+
+negative as 0: 161
+negative as 1: 34
+neutral as -1: 158
+neutral as 1: 192
+positive as -1: 46
+positive as 0: 208
